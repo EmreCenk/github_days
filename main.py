@@ -191,6 +191,7 @@ class github_stat_generator():
     def import_all_commits(self, username: str):
         try:
             imported = __import__(self.get_exported_commit_file_name(username).replace(".py", ""))
+            self.commits = imported
             return imported.commits
         except:
             raise ImportError(f"Username {username} has never exported data in current working directory.")
