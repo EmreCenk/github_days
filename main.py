@@ -3,25 +3,30 @@
 from os import environ
 import requests
 from requests.auth import HTTPBasicAuth
-from typing import Dict, List
+from typing import Dict, List, Set
 
 class github_stat_generator():
 
 
     def __init__(self, github_username: str = "",
-                 github_password: str = ""):
+                 github_password: str = "",
+                 import_data: bool = False):
         """
         :param github_username: if you want to authenticate, this will be your username
         :param github_password: if you want to authenticate, this will be your password
         Note: github only lets 60 requests per hour if you're not authenticated.
         """
         self.authentication = HTTPBasicAuth(github_username, github_password)
+
         self.data = None
         self.repos = None
         self.commits = None
+        self.import_data = import_data
 
 
-    def login(self, github_username: str, github_password: str):
+    def login(self, github_username: str,
+              github_password: str,
+              ):
         """
         :param github_username: username to log in
         :param github_password: password to log in
@@ -32,14 +37,51 @@ class github_stat_generator():
         Note: github only lets 60 requests per hour if you're not authenticated.
         """
         self.authentication = HTTPBasicAuth(github_username, github_password)
+
+    def export_data(self, user: str) -> None:
+        if self.data is None:
+            self.update_data(user)
+        i = 0
+        while True:
+            try:
+                file_name = user + "_export_" + str(i)
+                file = open(file_name, "w+")
+                file.write(str(self.data))
+                file.close()
+                break
+            except:
+                i+=1
+
+
     def update_data(self,
-                    username_to_get_data_for: str) -> Dict:
+                    username_to_get_data_for: str):
+        if not self.import_data:
+            return self.request_data(username_to_get_data_for)
+
+
+    def request_data(self,
+                     username_to_get_data_for: str) -> Dict:
         """
         :param username_to_get_data_for: string username
         :return: a dictionary that has the github response
         """
-        data = requests.get('https://api.github.com/users/' + username_to_get_data_for)
+        data = requests.get('https://api.github.com/users/' + username_to_get_data_for, auth=self.authentication)
+
         json_data = data.json()
+
+        if json_data == {'message': "API rate limit exceeded for 72.53.192.5. (But here's the good news: Authenticated requests get a higher rate limit."
+                               " Check out the documentation for more details.)",
+                    'documentation_url': 'https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting'}:
+            raise RuntimeError(
+                               "Unauthenticated users can make up to 60 requests per hour to the github api. "
+                               "It appears you have reached your maximum request limit. "
+                               "\nPlease authenticate to keep using this service. To do so, input your password and "
+                               "username when initializing the github_stat_generator class. \n\n"
+                               "Here is the message github gave:\n" + \
+                               "'message': 'API rate limit exceeded for 72.53.192.5. (But here's the good news: Authenticated requests get a higher rate limit."
+                               " Check out the documentation for more details.)'"
+            )
+
         self.data = json_data
         return json_data
 
@@ -51,7 +93,7 @@ class github_stat_generator():
         return self.number_of_pages_to_visit > self.current_page_num - 1
 
     def gathered_enough_repos(self) -> bool:
-        return self.commits_gathered > 30 #if there are less than 30 commits, that means we are at the last page
+        return self.repos_gathered < 30 #if there are less than 30 commits, that means we are at the last page
     def update_repos(self,
                      username_to_get_data_for: str,
                      number_of_repos: int = 30) -> List:
@@ -59,23 +101,21 @@ class github_stat_generator():
         :param number_of_repos: Number of repos to retrieve for user. INPUT -1 TO GET ALL REPOS.
         :return: list of commits
         """
-        self.commits_gathered = 0
+        self.repos_gathered = 0
+        self.current_page_num = 1  # number of pages already visited
 
         if self.data is None:
             self.update_data(username_to_get_data_for) #retreives
-        print("a")
+
         if number_of_repos > 0:
             self.number_of_pages_to_visit = (number_of_repos // 30) + 1 # this is the number of pages we need to visit since every page has 30 commits
-            self.current_page_num = 1 #number of pages already visited
             conditional_statement = self.pages_to_visit_is_greater_than_pages_visited
         else:
             conditional_statement = self.gathered_enough_repos
 
-        print("a", self.number_of_pages_to_visit)
 
         url = self.data['repos_url']
         repos = []
-
         while conditional_statement():
 
             response = requests.get(url,
@@ -85,10 +125,19 @@ class github_stat_generator():
             json_response = response.json()
             repos.extend(json_response)
             self.current_page_num += 1  # moving onto the next page
-            self.commits_gathered += len(json_response)
+            self.repos_gathered += len(json_response)
 
         self.repos = repos
         return repos
+
+    def get_all_commits(self, commit_url: str) -> List:
+        page_number = 1
+        commits = []
+        current_commits = [0]*30
+        while len(current_commits) == 30:
+            current_commits = requests.get(commit_url, auth=self.authentication).json()
+            commits.extend(current_commits)
+        return commits
 
     def update_all_commits(self,
                            username_to_get_data_for: str,
@@ -100,19 +149,36 @@ class github_stat_generator():
         :param username_to_get_data_for: username
         :return:
         """
+
         self.update_repos(username_to_get_data_for, number_of_repos = repo_number)
 
         self.commits = []
         for i, repo in enumerate(self.repos):
             # ex: repo["commits_url"] = "https://api.github.com/repos/EmreCenk/smartdraw_watermark_remover/commits{/sha}"
+
             commit_url = repo["commits_url"].replace("{/sha}", "")
-            commit = requests.get(commit_url, auth = self.authentication)
-            print(commit_url, commit)
-            self.commits.append(commit.json())
+            commits = self.get_all_commits(commit_url)
+
+            self.commits.extend(commits)
             if i >= repo_number:
                 break
         return self.commits
 
+    def find_how_many_distinct_days(self,
+                                    username_to_get_data_for: str,
+                                    repo_number: int = -1,) -> Set:
+        self.update_all_commits(username_to_get_data_for,
+                                repo_number)
+        print(len(self.repos), len(self.commits))
+        dates = set()
+        # for i in range(len(self.commits)):
+        #     print(self.commits[i])
+
+            # for j in self.commits[i]:
+            #     print(j)
+                # dates.add(self.commits[i][j]["commit"]["author"]["date"])
+
+        return dates
 
 if __name__ == '__main__':
     from dotenv import load_dotenv
@@ -120,9 +186,5 @@ if __name__ == '__main__':
     import pprint
     username = environ["GITHUB_USERNAME"]
     password = environ["GITHUB_PASSWORD"]
-    self = github_stat_generator(username, password)
-    a = self.update_all_commits("EmreCenk", 1)
-    print(len(a))
-    for k in a:
-        pprint.pprint(k)
-        break
+    self = github_stat_generator()
+    self.export_data("EmreCenk")
