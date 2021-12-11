@@ -40,8 +40,7 @@ class github_stat_generator():
         self.authentication = HTTPBasicAuth(github_username, github_password)
 
     def export_data(self, user: str) -> None:
-        if self.data is None:
-            self.update_data(user)
+        self.update_data(user)
         i = 0
         while True:
             try:
@@ -56,7 +55,7 @@ class github_stat_generator():
 
     def update_data(self,
                     username_to_get_data_for: str):
-        if not self.import_data:
+        if not (self.data is None):
             return self.request_data(username_to_get_data_for)
 
 
@@ -102,11 +101,13 @@ class github_stat_generator():
         :param number_of_repos: Number of repos to retrieve for user. INPUT -1 TO GET ALL REPOS.
         :return: list of commits
         """
+
+        if not (self.repos is None): #if cached, don't require again
+            return self.repos
         self.repos_gathered = 0
         self.current_page_num = 1  # number of pages already visited
 
-        if self.data is None:
-            self.update_data(username_to_get_data_for) #retreives
+        self.update_data(username_to_get_data_for) #retreives
 
         if number_of_repos > 0:
             self.number_of_pages_to_visit = (number_of_repos // 30) + 1 # this is the number of pages we need to visit since every page has 30 commits
@@ -150,6 +151,8 @@ class github_stat_generator():
         :param username_to_get_data_for: username
         :return:
         """
+        if self.commits is not None:
+            return self.commits
 
         self.update_repos(username_to_get_data_for, number_of_repos = repo_number)
 
@@ -170,14 +173,7 @@ class github_stat_generator():
                                     repo_number: int = -1,) -> Set:
         self.update_all_commits(username_to_get_data_for,
                                 repo_number)
-        print(len(self.repos), len(self.commits))
-        dates = set()
-        # for i in range(len(self.commits)):
-        #     print(self.commits[i])
 
-            # for j in self.commits[i]:
-            #     print(j)
-                # dates.add(self.commits[i][j]["commit"]["author"]["date"])
 
         return dates
 
