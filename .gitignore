@@ -129,3 +129,6 @@ dmypy.json
 .pyre/
 
 .idea/
+
+EmreCenk_export_0.py
+EmreCenk_exported_commits.py

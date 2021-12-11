@@ -7,7 +7,6 @@ from typing import Dict, List, Set
 
 class github_stat_generator():
 
-
     def __init__(self, github_username: str = "",
                  github_password: str = "",
                  import_data: bool = False):
@@ -23,6 +22,8 @@ class github_stat_generator():
         self.commits = None
         self.import_data = import_data
 
+    def get_exported_commit_file_name(self, username: str):
+        return username + "_exported_commits.py"
 
     def login(self, github_username: str,
               github_password: str,
@@ -44,7 +45,7 @@ class github_stat_generator():
         i = 0
         while True:
             try:
-                file_name = user + "_export_" + str(i)
+                file_name = user + "_export_data" + str(i)
                 file = open(file_name, "w+")
                 file.write(str(self.data))
                 file.close()
@@ -180,11 +181,32 @@ class github_stat_generator():
 
         return dates
 
+    def export_all_commits(self, username: str):
+        self.update_all_commits(username)
+
+        file_name = self.get_exported_commit_file_name(username)
+        file = open(file_name, "w+")
+        file.write("commits = " + str(self.commits))
+        file.close()
+    def import_all_commits(self, username: str):
+        try:
+            imported = __import__(self.get_exported_commit_file_name(username).replace(".py", ""))
+            return imported.commits
+        except:
+            raise ImportError(f"Username {username} has never exported data in current working directory.")
+
 if __name__ == '__main__':
     from dotenv import load_dotenv
     load_dotenv()
     import pprint
     username = environ["GITHUB_USERNAME"]
     password = environ["GITHUB_PASSWORD"]
-    self = github_stat_generator()
-    self.export_data("EmreCenk")
+    self = github_stat_generator(username, password)
+    # self.export_all_commits("EmreCenk")
+    print(self.import_all_commits("EmreCenk"))
+    # print(self.commits)
+
+    # with open("EmreCenk_export_0.py", "r") as file:
+    #     a = file.read()
+
+    # self.export_data("EmreCenk")
