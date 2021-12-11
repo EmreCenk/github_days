@@ -173,7 +173,17 @@ class github_stat_generator():
                                     repo_number: int = -1,) -> Set:
         self.update_all_commits(username_to_get_data_for,
                                 repo_number)
+        dates = set()
+        print(len(self.commits))
+        for commit in self.commits:
 
+            try:
+                date = commit["commit"]["author"]["date"]
+                # alternate way of accessing date:
+                # date = commit["commit"]["committer"]["date"]
+                dates.add(date)
+            except:
+                pass
 
         return dates
 
@@ -184,11 +194,11 @@ class github_stat_generator():
         file = open(file_name, "w+")
         file.write("commits = " + str(self.commits))
         file.close()
-    def import_all_commits(self, username: str):
+    def import_all_commits(self, username: str) -> List[Dict]:
         try:
             imported = __import__(self.get_exported_commit_file_name(username).replace(".py", ""))
-            self.commits = imported
-            return imported.commits
+            self.commits = imported.commits[:-2]
+            return self.commits
         except:
             raise ImportError(f"Username {username} has never exported data in current working directory.")
 
@@ -199,8 +209,10 @@ if __name__ == '__main__':
     username = environ["GITHUB_USERNAME"]
     password = environ["GITHUB_PASSWORD"]
     self = github_stat_generator(username, password)
-    # self.export_all_commits("EmreCenk")
-    print(self.import_all_commits("EmreCenk"))
+    self.import_all_commits("EmreCenk")
+    a = self.find_how_many_distinct_days("EmreCenk")
+    print(a)
+    print(len(a))
     # print(self.commits)
 
     # with open("EmreCenk_export_0.py", "r") as file:
